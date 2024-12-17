@@ -1,29 +1,10 @@
 ﻿using Newtonsoft.Json.Linq;
 using MigraDocCore.DocumentObjectModel;
 using MigraDocCore.Rendering;
+using ApiDocumentationExtractor.Models;
 
 class Program
 {
-    public class EndpointInfo
-    {
-        public string Tag { get; set; }
-        public string OperationId { get; set; }
-        public string HttpMethod { get; set; }
-        public string Path { get; set; }
-        public List<string> Consumes { get; set; } = new List<string>();
-        public List<string> Produces { get; set; } = new List<string>();
-        public List<ParameterInfo> Parameters { get; set; } = new List<ParameterInfo>();
-        public Dictionary<int, string> Responses { get; set; } = new Dictionary<int, string>();
-    }
-
-    public class ParameterInfo
-    {
-        public string Name { get; set; }
-        public string In { get; set; }
-        public bool Required { get; set; }
-        public string SchemaRef { get; set; }
-    }
-
     static void Main(string[] args)
     {
         string swaggerPath = "Netas_v1_0.json";
