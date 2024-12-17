@@ -6,41 +6,12 @@ using Newtonsoft.Json.Linq;
 using MigraDocCore.DocumentObjectModel;
 using MigraDocCore.Rendering;
 using PdfSharpCore.Pdf;
+using ApiDocumentationExtractor.Models;
 
 class Program
 {
-    public class EndpointInfo
-    {
-        public string Tag { get; set; }
-        public string OperationId { get; set; }
-        public string HttpMethod { get; set; }
-        public string Path { get; set; }
-        public string Summary { get; set; }
-        public string Description { get; set; }
-        public List<string> Consumes { get; set; } = new List<string>();
-        public List<string> Produces { get; set; } = new List<string>();
-        public List<ParameterInfo> Parameters { get; set; } = new List<ParameterInfo>();
-        public List<ResponseInfo> Responses { get; set; } = new List<ResponseInfo>();
-    }
-
-    public class ParameterInfo
-    {
-        public string Name { get; set; }
-        public string In { get; set; }
-        public bool Required { get; set; }
-        public string Description { get; set; }
-        public string Type { get; set; }
-    }
-
-    public class ResponseInfo
-    {
-        public int Code { get; set; }
-        public string Description { get; set; }
-    }
-
     static void Main(string[] args)
     {
-        // Kullanıcıdan bilgiler al
         Console.WriteLine("Doküman başlığı (örn. 'API Dokümantasyonu'):");
         string docTitle = Console.ReadLine();
 
@@ -215,7 +186,7 @@ class Program
         var datePara = section.AddParagraph($"Oluşturulma Tarihi: {DateTime.Now}");
         datePara.Format.Alignment = ParagraphAlignment.Center;
 
-        // İçindekiler sayfası - sadece Tag ve onun altındaki Endpointler
+        // İçindekiler sayfası (Sadece paths)
         var tocSection = doc.AddSection();
         tocSection.PageSetup.LeftMargin = Unit.FromCentimeter(2);
         tocSection.PageSetup.RightMargin = Unit.FromCentimeter(2);
@@ -223,48 +194,37 @@ class Program
         tocSection.PageSetup.BottomMargin = Unit.FromCentimeter(2);
 
         var tocTitle = tocSection.AddParagraph("İçindekiler");
-        tocTitle.Format.Font.Bold = true;
-        tocTitle.Format.Font.Size = 16;
-        tocTitle.Format.SpaceAfter = "1cm";
+        tocTitle.Style = "Heading1";
 
-        foreach (var group in groupedEndpoints)
+        // İçindekilerde sadece endpointler gösterilir
+        // Tüm endpointleri flat bir liste halinde göstermek için:
+        var allEndpoints = groupedEndpoints.SelectMany(g => g).ToList();
+        foreach (var ep in allEndpoints)
         {
-            // Tag
-            var groupLine = tocSection.AddParagraph(group.Key);
-            groupLine.Style = "Heading2";
+            var displayName = $"{ep.HttpMethod} {ep.Path}";
+            var bookmarkId = !string.IsNullOrEmpty(ep.OperationId) ? ep.OperationId : ep.Path;
 
-            foreach (var ep in group)
-            {
-                var displayName = !string.IsNullOrEmpty(ep.Summary) ? ep.Summary :
-                                  !string.IsNullOrEmpty(ep.OperationId) ? ep.OperationId :
-                                  $"{ep.HttpMethod} {ep.Path}";
-
-                // Burada bookmark ID'si olarak operationId kullan, yoksa path'i kullan
-                var bookmarkId = !string.IsNullOrEmpty(ep.OperationId) ? ep.OperationId : ep.Path;
-
-                var epLine = tocSection.AddParagraph();
-                var link = epLine.AddHyperlink(bookmarkId, HyperlinkType.Local);
-                link.AddText($"- {displayName} ({ep.HttpMethod} {ep.Path})");
-                epLine.Format.LeftIndent = Unit.FromCentimeter(1);
-                epLine.Format.SpaceAfter = "0.1cm";
-
-            }
+            var epLine = tocSection.AddParagraph();
+            var link = epLine.AddHyperlink(bookmarkId, HyperlinkType.Local);
+            link.AddText(displayName);
+            epLine.Format.LeftIndent = Unit.FromCentimeter(1);
+            epLine.Format.SpaceAfter = "0.1cm";
         }
 
-        // Paths
-        var pathSection = doc.AddSection();
-        pathSection.PageSetup.LeftMargin = Unit.FromCentimeter(2);
-        pathSection.PageSetup.RightMargin = Unit.FromCentimeter(2);
-        pathSection.PageSetup.TopMargin = Unit.FromCentimeter(2);
-        pathSection.PageSetup.BottomMargin = Unit.FromCentimeter(2);
+        // Endpoints bölümü (detaylar)
+        var endpointSection = doc.AddSection();
+        endpointSection.PageSetup.LeftMargin = Unit.FromCentimeter(2);
+        endpointSection.PageSetup.RightMargin = Unit.FromCentimeter(2);
+        endpointSection.PageSetup.TopMargin = Unit.FromCentimeter(2);
+        endpointSection.PageSetup.BottomMargin = Unit.FromCentimeter(2);
 
-        var pathsTitle = pathSection.AddParagraph("Paths");
-        pathsTitle.Style = "Heading1";
+        var endpointsTitle = endpointSection.AddParagraph("Endpoints");
+        endpointsTitle.Style = "Heading1";
 
         foreach (var group in groupedEndpoints)
         {
-            var groupTitle = pathSection.AddParagraph(group.Key);
-            groupTitle.Style = "Heading1"; // Bu da outline da ana başlık olsun
+            var groupTitle = endpointSection.AddParagraph(group.Key);
+            groupTitle.Style = "Heading2";
 
             foreach (var ep in group)
             {
@@ -273,13 +233,13 @@ class Program
                                     $"{ep.HttpMethod} {ep.Path}";
 
                 var bookmarkId = !string.IsNullOrEmpty(ep.OperationId) ? ep.OperationId : ep.Path;
-                var epPathTitle = pathSection.AddParagraph($"{ep.HttpMethod} {ep.Path}");
-                epPathTitle.Style = "Heading2";
+                var epPathTitle = endpointSection.AddParagraph($"{ep.HttpMethod} {ep.Path}");
+                epPathTitle.Style = "Heading3";
                 epPathTitle.AddBookmark(bookmarkId);
 
                 if (!string.IsNullOrEmpty(ep.Summary) && ep.Summary != ep.Path && ep.Summary != ep.OperationId)
                 {
-                    var summaryPara = pathSection.AddParagraph(ep.Summary);
+                    var summaryPara = endpointSection.AddParagraph(ep.Summary);
                     summaryPara.Format.Font.Italic = true;
                     summaryPara.Format.SpaceAfter = "0.2cm";
                 }
@@ -287,28 +247,29 @@ class Program
                 // description
                 if (!string.IsNullOrEmpty(ep.Description))
                 {
-                    var descPara = pathSection.AddParagraph(ep.Description);
+                    var descPara = endpointSection.AddParagraph(ep.Description);
                     descPara.Format.SpaceAfter = "0.3cm";
                 }
 
                 // Parameters
                 if (ep.Parameters.Any())
                 {
-                    var paramTitle = pathSection.AddParagraph("Parameters");
+                    var paramTitle = endpointSection.AddParagraph("Parameters");
                     paramTitle.Format.Font.Bold = true;
                     paramTitle.Format.SpaceAfter = "0.3cm";
 
-                    var paramTable = pathSection.AddTable();
+                    var paramTable = endpointSection.AddTable();
                     paramTable.Borders.Width = 0.5;
                     paramTable.Borders.Color = Colors.Gray;
                     paramTable.Format.SpaceAfter = "0.5cm";
 
-                    // Sütun genişliklerini daha uygun ayarla
-                    paramTable.AddColumn(Unit.FromCentimeter(3)); // name
-                    paramTable.AddColumn(Unit.FromCentimeter(2)); // in
-                    paramTable.AddColumn(Unit.FromCentimeter(6)); // description (daha geniş)
-                    paramTable.AddColumn(Unit.FromCentimeter(2)); // type
-                    paramTable.AddColumn(Unit.FromCentimeter(1)); // required
+                    // Sütun genişlikleri ayarla
+                    // name(2.5cm), in(2cm), description(7cm), type(2cm), required(1.5cm)
+                    paramTable.AddColumn(Unit.FromCentimeter(2.5));
+                    paramTable.AddColumn(Unit.FromCentimeter(2));
+                    paramTable.AddColumn(Unit.FromCentimeter(7));
+                    paramTable.AddColumn(Unit.FromCentimeter(2));
+                    paramTable.AddColumn(Unit.FromCentimeter(1.5));
 
                     var headerRow = paramTable.AddRow();
                     headerRow.Shading.Color = Colors.LightGray;
@@ -332,17 +293,17 @@ class Program
                 // Responses
                 if (ep.Responses.Any())
                 {
-                    var respTitle = pathSection.AddParagraph("Responses");
+                    var respTitle = endpointSection.AddParagraph("Responses");
                     respTitle.Format.Font.Bold = true;
                     respTitle.Format.SpaceAfter = "0.3cm";
 
-                    var respTable = pathSection.AddTable();
+                    var respTable = endpointSection.AddTable();
                     respTable.Borders.Width = 0.5;
                     respTable.Borders.Color = Colors.Gray;
                     respTable.Format.SpaceAfter = "0.5cm";
 
                     respTable.AddColumn(Unit.FromCentimeter(2));
-                    respTable.AddColumn(Unit.FromCentimeter(10));
+                    respTable.AddColumn(Unit.FromCentimeter(14)); // geniş description alanı
 
                     var respHeader = respTable.AddRow();
                     respHeader.Shading.Color = Colors.LightGray;
@@ -357,7 +318,7 @@ class Program
                     }
                 }
 
-                pathSection.AddParagraph("\n");
+                endpointSection.AddParagraph("\n");
             }
         }
 

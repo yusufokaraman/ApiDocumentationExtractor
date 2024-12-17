@@ -11,6 +11,7 @@ namespace ApiDocumentationExtractor.Models
         public string Name { get; set; }
         public string In { get; set; }
         public bool Required { get; set; }
-        public string SchemaRef { get; set; }
+        public string Description { get; set; }
+        public string Type { get; set; }
     }
 }
