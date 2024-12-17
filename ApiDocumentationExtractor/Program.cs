@@ -40,19 +40,20 @@ class Program
 
     static void Main(string[] args)
     {
-        Console.WriteLine("Lütfen doküman başlığını girin (örn. API Dokümantasyonu):");
+        // Kullanıcıdan bilgiler al
+        Console.WriteLine("Doküman başlığı (örn. 'API Dokümantasyonu'):");
         string docTitle = Console.ReadLine();
 
-        Console.WriteLine("Lütfen doküman konusu (subject) girin (örn. Otomatik oluşturulan API dokümantasyonu):");
+        Console.WriteLine("Doküman konusu (örn. 'Otomatik oluşturulan API dokümantasyonu'):");
         string docSubject = Console.ReadLine();
 
-        Console.WriteLine("Lütfen yazar adını girin (örn. Şirketiniz):");
+        Console.WriteLine("Yazar adı (örn. 'Şirketiniz'):");
         string docAuthor = Console.ReadLine();
 
-        Console.WriteLine("Lütfen versiyon bilgisini girin (örn. 1.0.0):");
+        Console.WriteLine("Versiyon bilgisi (örn. '1.0.0'):");
         string docVersion = Console.ReadLine();
 
-        Console.WriteLine("Lütfen swagger JSON dosyasının yolunu girin (örn. Netas_v1_0.json):");
+        Console.WriteLine("Swagger JSON dosya yolu (örn. 'Netas_v1_0.json'):");
         string swaggerPath = Console.ReadLine();
 
         if (!File.Exists(swaggerPath))
@@ -66,13 +67,13 @@ class Program
 
         // PDF oluştur
         CreatePdfDocumentation(groupedByTag, "output.pdf", docTitle, docSubject, docAuthor, docVersion);
-        Console.WriteLine("PDF dokümantasyonu 'output.pdf' olarak üretildi.");
+        Console.WriteLine("PDF 'output.pdf' oluşturuldu.");
 
         // HTML oluştur (spec embed)
         CreateSwaggerUIHtml("index.html", swaggerPath, docTitle);
-        Console.WriteLine("Swagger UI arayüzü 'index.html' dosyasında oluşturuldu (spec embed ile).");
+        Console.WriteLine("'index.html' oluşturuldu. HTML dosyasını açarak Swagger UI görebilirsiniz.");
 
-        Console.WriteLine("İşlem tamamlandı.");
+        Console.WriteLine("Tamamlandı.");
     }
 
     public static List<EndpointInfo> ParseSwagger(string jsonPath)
@@ -112,12 +113,8 @@ class Program
                         var @in = paramObj["in"]?.ToString();
                         var required = paramObj["required"]?.ToObject<bool>() ?? false;
                         var paramDescription = paramObj["description"]?.ToString();
-                        // type genelde parametre seviyesinde olabilir.
-                        // Eğer yoksa schema'dan almamız gerekebilir.
                         var type = paramObj["type"]?.ToString();
 
-                        // Eğer schema var ve type yoksa basitçe type = "object" diyebiliriz.
-                        // Daha gelişmiş bir çözümleme için definitions parse etmek gerekebilir.
                         if (type == null && paramObj["schema"] != null)
                         {
                             type = "object";
@@ -218,7 +215,7 @@ class Program
         var datePara = section.AddParagraph($"Oluşturulma Tarihi: {DateTime.Now}");
         datePara.Format.Alignment = ParagraphAlignment.Center;
 
-        // İçindekiler sayfası
+        // İçindekiler sayfası - sadece Tag ve onun altındaki Endpointler
         var tocSection = doc.AddSection();
         tocSection.PageSetup.LeftMargin = Unit.FromCentimeter(2);
         tocSection.PageSetup.RightMargin = Unit.FromCentimeter(2);
@@ -232,23 +229,29 @@ class Program
 
         foreach (var group in groupedEndpoints)
         {
-            var groupTitle = tocSection.AddParagraph(group.Key);
-            groupTitle.Style = "Heading2";
-            groupTitle.Format.Font.Italic = true;
+            // Tag
+            var groupLine = tocSection.AddParagraph(group.Key);
+            groupLine.Style = "Heading2";
+
             foreach (var ep in group)
             {
-                var displayName = !string.IsNullOrEmpty(ep.Summary) ? ep.Summary : ep.OperationId;
-                if (string.IsNullOrEmpty(displayName))
-                {
-                    displayName = $"{ep.HttpMethod} {ep.Path}";
-                }
-                var epLine = tocSection.AddParagraph($"- {displayName} ({ep.HttpMethod} {ep.Path})");
+                var displayName = !string.IsNullOrEmpty(ep.Summary) ? ep.Summary :
+                                  !string.IsNullOrEmpty(ep.OperationId) ? ep.OperationId :
+                                  $"{ep.HttpMethod} {ep.Path}";
+
+                // Burada bookmark ID'si olarak operationId kullan, yoksa path'i kullan
+                var bookmarkId = !string.IsNullOrEmpty(ep.OperationId) ? ep.OperationId : ep.Path;
+
+                var epLine = tocSection.AddParagraph();
+                var link = epLine.AddHyperlink(bookmarkId, HyperlinkType.Local);
+                link.AddText($"- {displayName} ({ep.HttpMethod} {ep.Path})");
                 epLine.Format.LeftIndent = Unit.FromCentimeter(1);
                 epLine.Format.SpaceAfter = "0.1cm";
+
             }
         }
 
-        // Detay sayfaları
+        // Paths
         var pathSection = doc.AddSection();
         pathSection.PageSetup.LeftMargin = Unit.FromCentimeter(2);
         pathSection.PageSetup.RightMargin = Unit.FromCentimeter(2);
@@ -261,20 +264,22 @@ class Program
         foreach (var group in groupedEndpoints)
         {
             var groupTitle = pathSection.AddParagraph(group.Key);
-            groupTitle.Style = "Heading2";
+            groupTitle.Style = "Heading1"; // Bu da outline da ana başlık olsun
 
             foreach (var ep in group)
             {
-                // Başlık olarak summary kullan, summary yoksa operationId veya en son fallback olarak path ver
-                var epDisplayName = !string.IsNullOrEmpty(ep.Summary) ? ep.Summary : (string.IsNullOrEmpty(ep.OperationId) ? $"{ep.HttpMethod} {ep.Path}" : ep.OperationId);
+                var epDisplayName = !string.IsNullOrEmpty(ep.Summary) ? ep.Summary :
+                                    !string.IsNullOrEmpty(ep.OperationId) ? ep.OperationId :
+                                    $"{ep.HttpMethod} {ep.Path}";
 
+                var bookmarkId = !string.IsNullOrEmpty(ep.OperationId) ? ep.OperationId : ep.Path;
                 var epPathTitle = pathSection.AddParagraph($"{ep.HttpMethod} {ep.Path}");
-                epPathTitle.Style = "Heading3";
+                epPathTitle.Style = "Heading2";
+                epPathTitle.AddBookmark(bookmarkId);
 
-                if (!string.IsNullOrEmpty(epDisplayName) && epDisplayName != ep.Path && epDisplayName != ep.OperationId)
+                if (!string.IsNullOrEmpty(ep.Summary) && ep.Summary != ep.Path && ep.Summary != ep.OperationId)
                 {
-                    // Summary var ve path/operationId den farklı ise ayrı bir paragrafta göster
-                    var summaryPara = pathSection.AddParagraph(epDisplayName);
+                    var summaryPara = pathSection.AddParagraph(ep.Summary);
                     summaryPara.Format.Font.Italic = true;
                     summaryPara.Format.SpaceAfter = "0.2cm";
                 }
@@ -298,11 +303,12 @@ class Program
                     paramTable.Borders.Color = Colors.Gray;
                     paramTable.Format.SpaceAfter = "0.5cm";
 
-                    paramTable.AddColumn(Unit.FromCentimeter(3));
-                    paramTable.AddColumn(Unit.FromCentimeter(2));
-                    paramTable.AddColumn(Unit.FromCentimeter(4));
-                    paramTable.AddColumn(Unit.FromCentimeter(2));
-                    paramTable.AddColumn(Unit.FromCentimeter(2));
+                    // Sütun genişliklerini daha uygun ayarla
+                    paramTable.AddColumn(Unit.FromCentimeter(3)); // name
+                    paramTable.AddColumn(Unit.FromCentimeter(2)); // in
+                    paramTable.AddColumn(Unit.FromCentimeter(6)); // description (daha geniş)
+                    paramTable.AddColumn(Unit.FromCentimeter(2)); // type
+                    paramTable.AddColumn(Unit.FromCentimeter(1)); // required
 
                     var headerRow = paramTable.AddRow();
                     headerRow.Shading.Color = Colors.LightGray;
